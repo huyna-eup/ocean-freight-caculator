@@ -170,7 +170,7 @@ function getP(o,p){return p.split(".").reduce((a,k)=>a[k],o)}
 function setP(o,p,v){const k=p.split(".");const l=k.pop();k.reduce((a,x)=>a[x],o)[l]=v}
 function rows(){
  document.getElementById("pt").innerHTML=`<tr><th>Category</th><th>Grade</th><th>Description</th><th>Accounting Price/MT</th><th>FOB Price/MT</th><th>Qty (MT)</th><th>Cost/MT (advanced, opt.)</th><th class="r">Value</th><th></th></tr>`+
- S.products.map((p,i)=>`<tr><td><select data-a="products" data-i="${i}" data-f="cat">${opts(["White MB","Black MB","Color MB","Additive MB","Engineering Compound","Filler MB","Bio Filler","Bio Compound","Bio Material","Other"],p.cat)}</select></td>
+ S.products.map((p,i)=>`<tr><td><select data-a="products" data-i="${i}" data-f="cat">${opts(["White MB","Black MB","Color MB","Additive MB","Engineering Compound","Filler MB","Bio Filler","Bio Compound","Other"],p.cat)}</select></td>
  <td><input data-a="products" data-i="${i}" data-f="grade" value="${esc(p.grade)}"></td><td><input data-a="products" data-i="${i}" data-f="desc" value="${esc(p.desc)}"></td>
  <td><input type="number" min="0" step="any" data-a="products" data-i="${i}" data-f="accounting" value="${p.accounting??""}"></td>
  <td><input type="number" min="0" step="any" data-a="products" data-i="${i}" data-f="price" value="${p.price||""}"></td>

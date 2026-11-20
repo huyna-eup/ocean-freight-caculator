@@ -112,7 +112,7 @@ header .row{align-items:center}
 </head>
 <body>
 <header><div><h1>EuP Export Pricing Calculator</h1><small>Incoterms 2020 conversion · core calculator</small></div>
-<div class="row" style="margin:0"><button id="gd">Hướng dẫn</button><button id="ex">Load example</button><button id="view" type="button" title="Switch between desktop and phone layouts">📱 Mobile view</button><button id="th">Dark / light</button></div></header>
+<div class="row" style="margin:0"><button id="gd">Hướng dẫn</button><button id="ex">Load example</button><button id="view" type="button" title="Switch between desktop and phone layouts">📱 Mobile view</button><button id="th">Dark / light</button><button id="clearAll" type="button" title="Clear the current calculation">Clear all</button></div></header>
 <main>
 <div>
 <section id="guide"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h2 style="margin:0">Hướng dẫn sử dụng</h2><button id="gdc">Đóng</button></div>
@@ -213,6 +213,7 @@ const S={base:"FOB",term:"CIF",mode:"Sea",alloc:"weight",
 ship:{place:"",pol:"Hai Phong, Vietnam",pod:"",type:"FCL",cont:"20GP",n:1,cbm:0,gw:0,pay:0,cur:"USD",valid:""},
 products:[{cat:"White MB",grade:"",desc:"",price:0,accounting:"",qty:0,cost:""}],lines:[],ins:{rate:"",cov:110,min:"",fixed:""},
 pm:{mode:"1",pct:"",exp:0,cont:0,bank:0,comm:0,disc:0},imp:{cvm:"auto",cvt:"",duty:"",oth:"",vat:"",rec:"no"}};
+const DEFAULT_CALC_STATE=JSON.parse(JSON.stringify(S));
 const N=v=>{v=parseFloat(v);return isFinite(v)?v:0},c2=v=>Math.round((v+Number.EPSILON)*100)/100,esc=s=>String(s).replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));
 const f2=v=>v.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
 const opts=(a,v)=>a.map(x=>`<option${x==v?" selected":""}>${x}</option>`).join("");
@@ -497,6 +498,36 @@ rows();rCmp();rPV();calc();
  let saved='';try{saved=localStorage.getItem('eup_view_mode')||''}catch(e){}
  setMode(saved==='desktop'||saved==='mobile'?saved:(window.matchMedia('(max-width:760px)').matches?'mobile':'desktop'));
  button.addEventListener('click',()=>setMode(root.dataset.view==='mobile'?'desktop':'mobile'));
+})();
+</script>
+
+<script>
+// Explicitly reset the live application state. Reloading the page is not a
+// reliable reset because browsers may restore form inputs after navigation.
+(function(){
+ const btn=document.getElementById('clearAll');
+ if(!btn)return;
+ btn.addEventListener('click',function(event){
+   event.preventDefault();
+   event.stopPropagation();
+   if(!window.confirm('Clear all entered data in this calculation? Saved calculations and saved freight quotes will be kept.'))return;
+   // Replace every property, including nested objects and product/charge arrays.
+   for(const key of Object.keys(S))delete S[key];
+   Object.assign(S,JSON.parse(JSON.stringify(DEFAULT_CALC_STATE)));
+   // Uploaded quote previews and unsaved form values are separate from S.
+   PV=[];
+   document.getElementById('profitMarket').value='INDIA';
+   document.getElementById('sn').value='';
+   document.getElementById('ss').selectedIndex=0;
+   document.getElementById('fqf').value='';
+   document.getElementById('fqp').innerHTML='';
+   const guide=document.getElementById('guide');
+   // Do not reset theme, view preference, guide preference, or saved records.
+   rows();
+   rPV();
+   rCmp();
+   calc();
+ },true);
 })();
 </script>
 </body>

@@ -389,12 +389,12 @@ document.addEventListener("click",e=>{const t=e.target;
   S.products=[{cat:"White MB",grade:"Example",desc:"White Masterbatch",price:2150,accounting:2000,qty:25,cost:""}];S.lines=[{name:"Ocean freight",stage:"freight",amt:500,cur:"USD",rate:1,unit:"container",mode:"auto"}];
   S.ins={rate:0.03,cov:110,min:"",fixed:""};S.pm.mode="1";rows();calc()}
  if(t.id=="sv"){const k=sk();k.push({name:document.getElementById("sn").value||"Untitled",status:document.getElementById("ss").value,date:new Date().toISOString().slice(0,10),market:document.getElementById("profitMarket").value,s:JSON.parse(JSON.stringify(S))});st(k);sl()}
- if(t.dataset.ld!==undefined){const saved=sk()[t.dataset.ld];Object.assign(S,saved.s);document.getElementById("profitMarket").value=saved.market||"INDIA";rows();calc()}
+ if(t.dataset.ld!==undefined){const saved=sk()[t.dataset.ld];Object.assign(S,saved.s);document.getElementById("profitMarket").value=saved.market||"INDIA";rows();calc();if(typeof invalidateQuotationPreview==='function')invalidateQuotationPreview()}
  if(t.dataset.dl!==undefined){const k=sk();k.splice(t.dataset.dl,1);st(k);sl()}});
 let mem=[];function sk(){try{return JSON.parse(localStorage.getItem("eup_calcs")||"[]")}catch(e){return mem}}
 function st(k){mem=k;try{localStorage.setItem("eup_calcs",JSON.stringify(k))}catch(e){}}
 function sl(){const k=sk();document.getElementById("sl").innerHTML=k.length?`<table>${k.map((x,i)=>`<tr><td>${esc(x.name)}</td><td>${esc(x.status)}</td><td>${x.date}</td><td style="text-align:right"><button data-ld="${i}">Load</button> <button data-dl="${i}">Delete</button></td></tr>`).join("")}</table>`:`<span style="color:var(--mu)">Nothing saved yet.</span>`}
-document.getElementById("bs").onchange=e=>{S.base=e.target.value;calc()};document.getElementById("tg").onchange=e=>{S.term=e.target.value;calc()};
+document.getElementById("bs").onchange=e=>{S.base=e.target.value;calc()};document.getElementById("tg").onchange=e=>{S.term=e.target.value;calc();if(typeof invalidateQuotationPreview==="function")invalidateQuotationPreview()};
 /* ---- Freight quotations ---- */
 const Q=[];let PV=[];
 try{Q.push(...JSON.parse(localStorage.getItem("eup_quotes")||"[]"))}catch(e){}
@@ -573,8 +573,12 @@ rows();rCmp();rPV();calc();
 #mobileQuoteContent th,#mobileQuoteContent td{border:1px solid #d9e0e9;padding:6px 4px;overflow-wrap:anywhere}
 #mobileQuoteContent th{background:#14305a;color:#fff}#mobileQuoteContent .num{text-align:right}
 #mobileQuoteContent .quote-totals{margin-left:auto;max-width:440px}#mobileQuoteContent .quote-totals>div{display:flex;justify-content:space-between;gap:10px;margin:6px 0}
-#mobileQuoteContent .quote-grand{border-top:2px solid #14305a;padding-top:8px;display:grid!important;grid-template-columns:1fr 1fr;gap:12px;color:#14305a;font-weight:bold}
-#mobileQuoteContent .quote-grand>div{display:block}#mobileQuoteContent .quote-grand>div:last-child{text-align:right}
+#mobileQuoteContent .quote-grand{border-top:2px solid #14305a;padding-top:12px;display:flex!important;flex-direction:column;gap:7px;color:#14305a}
+#mobileQuoteContent .quote-grand .grand-item{display:flex!important;flex-direction:row;align-items:baseline;justify-content:space-between;gap:12px;width:100%;text-align:left}
+#mobileQuoteContent .quote-grand .grand-item:last-child{order:1;font-size:17px;font-weight:700}
+#mobileQuoteContent .quote-grand .grand-item:last-child .amount{font-size:24px;font-weight:700;white-space:nowrap}
+#mobileQuoteContent .quote-grand .grand-item:first-child{order:2;font-size:12px;font-weight:400}
+#mobileQuoteContent .quote-grand .grand-item:first-child .amount{font-size:12px;font-weight:400;white-space:nowrap}
 @media(max-width:550px){#mobileQuoteContent{margin:0;padding:12px 7px}#mobileQuoteContent table{font-size:9px}#mobileQuoteContent th,#mobileQuoteContent td{padding:5px 2px}#mobileQuoteContent .quote-meta{gap:6px}}
 @media print{body.quote-print-mode>*:not(#mobileQuotePanel){display:none!important}body.quote-print-mode #mobileQuotePanel{position:static;overflow:visible;background:#fff}body.quote-print-mode .mobile-quote-toolbar{display:none!important}body.quote-print-mode #mobileQuoteContent{margin:0;max-width:none;padding:0;min-height:0}body.quote-print-mode{background:#fff!important}@page{size:A4;margin:12mm}#mobileQuoteContent th,#mobileQuoteContent .quote-header{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style>
@@ -590,12 +594,13 @@ rows();rCmp();rPV();calc();
  const fmt=n=>Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
  const pdfText=v=>String(v??'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[\u0111]/g,'d').replace(/[\u0110]/g,'D').replace(/[^\x20-\x7e\n]/g,' ').replace(/\s+/g,' ').trim();
  function printQuotation(items,total,totalQty,productBase,cur){
+  S.term=$('tg').value;
   const e=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const f=id=>e($(id).value);
   const r=items.map((p,i)=>`<tr><td>${i+1}</td><td>${e(p.grade||p.cat)}</td><td>${e(p.desc||p.cat)}</td><td class="num">${fmt(N(p.qty))}</td><td class="num">${fmt(N(p.price))}</td><td class="num">${fmt(N(p.qty)*N(p.price))}</td></tr>`).join('');
   const details=[['Payment terms',f('qtPayment')],['Delivery time',f('qtLead')],['Remarks',f('qtRemarks')]].filter(x=>x[1]).map(x=>`<p><strong>${x[0]}:</strong> ${x[1]}</p>`).join('');
   const html=`<!doctype html><html><head><meta charset="utf-8"><title>Commercial Quotation</title><style>
-  @page{size:A4;margin:17mm}*{box-sizing:border-box}body{font:12px Arial,sans-serif;color:#1b293a;margin:0}header{background:#14305a;color:white;padding:19px 18px;margin-bottom:22px}h1{font-size:22px;margin:0 0 8px}header p{margin:0}.meta{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}.meta div{line-height:1.65}small{display:block;color:#66768a;font-weight:bold;text-transform:uppercase}h2{font-size:12px;margin:16px 0 7px;color:#14305a}table{width:100%;border-collapse:collapse;margin:15px 0;table-layout:fixed}th,td{border:1px solid #d9e0e9;padding:8px 5px;overflow-wrap:anywhere}th{background:#14305a;color:white;text-align:left}tr{break-inside:avoid}.num{text-align:right}.totals{margin-left:auto;width:54%;line-height:2}.totals div{display:flex;justify-content:space-between;gap:10px}.grand{border-top:2px solid #14305a;font-size:13px;font-weight:bold;color:#14305a;display:grid!important;grid-template-columns:1fr 1fr;gap:12px!important;padding-top:7px}.grand .grand-item{display:flex;flex-direction:column;gap:1px;line-height:1.45}.grand .grand-item:last-child{text-align:right}.grand .grand-item .amount{font-size:15px}.foot{margin-top:25px;color:#66768a;font-size:10px}@media print{header,th{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
+  @page{size:A4;margin:17mm}*{box-sizing:border-box}body{font:12px Arial,sans-serif;color:#1b293a;margin:0}header{background:#14305a;color:white;padding:19px 18px;margin-bottom:22px}h1{font-size:22px;margin:0 0 8px}header p{margin:0}.meta{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}.meta div{line-height:1.65}small{display:block;color:#66768a;font-weight:bold;text-transform:uppercase}h2{font-size:12px;margin:16px 0 7px;color:#14305a}table{width:100%;border-collapse:collapse;margin:15px 0;table-layout:fixed}th,td{border:1px solid #d9e0e9;padding:8px 5px;overflow-wrap:anywhere}th{background:#14305a;color:white;text-align:left}tr{break-inside:avoid}.num{text-align:right}.totals{margin-left:auto;width:54%;line-height:2}.totals div{display:flex;justify-content:space-between;gap:10px}.grand{border-top:2px solid #14305a;padding-top:10px!important;display:flex!important;flex-direction:column;gap:7px!important;color:#14305a;line-height:1.45}.grand .grand-item{display:flex!important;flex-direction:row;justify-content:space-between;align-items:baseline;gap:10px;text-align:left;width:100%}.grand .grand-item:first-child{order:2;font-size:12px;font-weight:normal}.grand .grand-item:last-child{order:1;font-size:17px;font-weight:bold}.grand .grand-item:first-child .amount{font-size:12px;font-weight:normal;white-space:nowrap}.grand .grand-item:last-child .amount{font-size:24px;font-weight:bold;white-space:nowrap}.foot{margin-top:25px;color:#66768a;font-size:10px}@media print{header,th{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
   </style></head><body><header><h1>COMMERCIAL QUOTATION</h1><p>${f('qtSeller')||'European Plastic Joint Stock Company'}</p></header>
   <div class="meta"><div><small>Quotation no.</small>${f('qtNo')||'-'}<small>Customer</small>${f('qtCustomer')||'-'}<small>Contact</small>${f('qtContact')||'-'}</div><div><small>Date</small>${f('qtDate')||'-'}<small>Valid until</small>${f('qtValid')||e(S.ship.valid)||'-'}<small>Currency</small>${e(cur)}</div></div>
   <h2>DELIVERY TERMS</h2><p>${e(S.term)} ${e(S.ship.place)} (Incoterms 2020)</p><p>Route: ${e(S.ship.pol)} → ${e(S.ship.pod)}</p>
@@ -620,10 +625,19 @@ rows();rCmp();rPV();calc();
  $('mobileQuoteBack').addEventListener('click',()=>{ $('mobileQuotePanel').hidden=true;document.body.style.overflow='';document.body.classList.remove('quote-print-mode'); });
  $('mobileQuotePrint').addEventListener('click',()=>{document.body.classList.add('quote-print-mode');window.print();});
  window.addEventListener('afterprint',()=>document.body.classList.remove('quote-print-mode'));
+ // A previously exported PNG is static; discard it when the quoted Incoterm changes.
+ function invalidateQuotationPreview(){
+  const panel=$('mobileQuotePanel'),img=$('mobileQuoteImage');
+  if(img){img.removeAttribute('src');img.hidden=true;}
+  if(panel){panel.classList.remove('image-mode');panel.hidden=true;}
+  document.body.style.overflow='';
+  $('qtStatus').textContent='Delivery term changed to '+S.term+'. Export a new quotation to show the updated '+S.term+' prices.';
+ }
  $('mobileQuoteShare').addEventListener('click',()=>startQuotationImage());
  $('shareQuotation').addEventListener('click',()=>startQuotationImage());
  $('exportQuotation').addEventListener('click',()=>startQuotationExport(false));
  async function startQuotationImage(){
+  S.term=$('tg').value;
   const status=$('qtStatus');
   const items=S.products.filter(p=>N(p.qty)>0&&N(p.price)>0);
   if(!items.length){status.textContent='Enter a product with FOB price and quantity first.';return}
@@ -663,6 +677,7 @@ rows();rCmp();rPV();calc();
   }
  }
  async function startQuotationExport(shareMode){
+  S.term=$('tg').value;
   const status=$('qtStatus');status.textContent='';
   const items=S.products.filter(p=>N(p.qty)>0&&N(p.price)>0);
   if(!items.length){status.textContent='Enter a product with FOB price and quantity first.';return}
@@ -724,20 +739,21 @@ rows();rCmp();rPV();calc();
   doc.autoTable({startY:y,head:[['No.','Grade','Description','Qty (MT)',`FOB / MT (${cur})`,`FOB total (${cur})`]],body:rows,theme:'grid',styles:{font:'helvetica',fontSize:8,cellPadding:2.8,textColor:[35,44,59],lineColor:[223,229,236],lineWidth:.15,overflow:'linebreak'},headStyles:{fillColor:navy,textColor:255,fontStyle:'bold'},columnStyles:{0:{cellWidth:10},1:{cellWidth:31},2:{cellWidth:54},3:{cellWidth:20,halign:'right'},4:{cellWidth:30,halign:'right'},5:{cellWidth:31,halign:'right'}},margin:{left:margin,right:margin},didDrawPage:function(){doc.setFontSize(8);doc.setTextColor(...muted);doc.text('European Plastic Joint Stock Company  |  Customer quotation',margin,286);doc.text('Page '+doc.internal.getNumberOfPages(),right,286,{align:'right'})}});
   y=doc.lastAutoTable.finalY+11;
   function ensure(h){if(y+h>270){doc.addPage();y=20}}
-  ensure(65);
+  ensure(80);
   doc.setFontSize(9);doc.setTextColor(...muted);doc.text('Total quantity',112,y);doc.setTextColor(30,40,55);doc.text(fmt(totalQty)+' MT',right,y,{align:'right'});y+=7;
   doc.setTextColor(...muted);doc.text('FOB product value',112,y);doc.setTextColor(30,40,55);doc.text(cur+' '+fmt(productBase),right,y,{align:'right'});y+=7;
   if(S.term!=='FOB'){
    doc.setTextColor(...muted);doc.text('Delivery / other price adjustment',112,y);doc.setTextColor(30,40,55);doc.text(cur+' '+fmt(total-productBase),right,y,{align:'right'});y+=7;
   }
-  // Unit price and total quotation share the same final summary row.
-  doc.setDrawColor(...navy);doc.line(110,y+1,right,y+1);y+=8;
-  doc.setFontSize(9);doc.setFont('helvetica','bold');doc.setTextColor(...navy);
+  // Two aligned rows: total first in large type; per-MT beneath at breakdown size.
+  doc.setDrawColor(...navy);doc.line(110,y+1,right,y+1);y+=12;
+  doc.setTextColor(...navy);doc.setFont('helvetica','bold');doc.setFontSize(11);
+  doc.text('TOTAL '+S.term+' ('+cur+')',112,y);
+  doc.setFontSize(17);doc.text(fmt(total),right,y,{align:'right'});
+  y+=10;doc.setFont('helvetica','normal');doc.setFontSize(9);
   doc.text(S.term+' PRICE / MT',112,y);
-  doc.text('TOTAL '+S.term+' ('+cur+')',right,y,{align:'right'});
-  y+=7;doc.setFontSize(11);
-  doc.text(cur+' '+fmt(total/totalQty),112,y);
-  doc.text(fmt(total),right,y,{align:'right'});y+=12;
+  doc.text(cur+' '+fmt(total/totalQty),right,y,{align:'right'});
+  y+=12;
   doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(30,40,55);
   const details=[['Payment terms',$('qtPayment').value],['Delivery time',$('qtLead').value],['Remarks',$('qtRemarks').value]];
   details.forEach(([label,value])=>{if(!value.trim())return;ensure(18);doc.setFont('helvetica','bold');doc.text(label+':',margin,y);doc.setFont('helvetica','normal');const lines=doc.splitTextToSize(pdfText(value),173);doc.text(lines,margin,y+5);y+=9+lines.length*4});

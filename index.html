@@ -549,6 +549,28 @@ rows();rCmp();rPV();calc();
  },true);
 })();
 </script>
+<div id="mobileQuotePanel" role="dialog" aria-modal="true" aria-label="Quotation preview" hidden>
+ <div class="mobile-quote-toolbar"><button type="button" id="mobileQuoteBack">← Back to calculator</button><span>Quotation preview</span><button type="button" id="mobileQuotePrint">Print / Save PDF</button></div>
+ <div id="mobileQuoteContent"></div>
+</div>
+<style>
+#mobileQuotePanel[hidden]{display:none!important}
+#mobileQuotePanel{position:fixed;inset:0;z-index:9999;background:#eef1f5;color:#17202e;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.mobile-quote-toolbar{position:sticky;top:0;z-index:3;display:flex;gap:8px;align-items:center;justify-content:space-between;padding:calc(10px + env(safe-area-inset-top,0px)) 10px 10px;background:#14305a;color:#fff;flex-wrap:wrap}
+.mobile-quote-toolbar button{background:#fff;color:#14305a;border:0;border-radius:6px;padding:10px;font-size:13px}
+#mobileQuoteContent{max-width:850px;margin:12px auto;padding:18px;background:#fff;font:12px/1.5 Arial,sans-serif;min-height:60vh}
+#mobileQuoteContent .quote-header{background:#14305a;color:#fff;padding:18px;margin-bottom:18px}
+#mobileQuoteContent h1{font-size:21px;margin:0 0 5px}#mobileQuoteContent .quote-meta{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0}
+#mobileQuoteContent .quote-meta small{display:block;color:#66768a;text-transform:uppercase;font-size:10px;margin-top:7px}
+#mobileQuoteContent table{width:100%;border-collapse:collapse;table-layout:fixed;margin:14px 0;font-size:11px}
+#mobileQuoteContent th,#mobileQuoteContent td{border:1px solid #d9e0e9;padding:6px 4px;overflow-wrap:anywhere}
+#mobileQuoteContent th{background:#14305a;color:#fff}#mobileQuoteContent .num{text-align:right}
+#mobileQuoteContent .quote-totals{margin-left:auto;max-width:440px}#mobileQuoteContent .quote-totals>div{display:flex;justify-content:space-between;gap:10px;margin:6px 0}
+#mobileQuoteContent .quote-grand{border-top:2px solid #14305a;padding-top:8px;display:grid!important;grid-template-columns:1fr 1fr;gap:12px;color:#14305a;font-weight:bold}
+#mobileQuoteContent .quote-grand>div{display:block}#mobileQuoteContent .quote-grand>div:last-child{text-align:right}
+@media(max-width:550px){#mobileQuoteContent{margin:0;padding:12px 7px}#mobileQuoteContent table{font-size:9px}#mobileQuoteContent th,#mobileQuoteContent td{padding:5px 2px}#mobileQuoteContent .quote-meta{gap:6px}}
+@media print{body.quote-print-mode>*:not(#mobileQuotePanel){display:none!important}body.quote-print-mode #mobileQuotePanel{position:static;overflow:visible;background:#fff}body.quote-print-mode .mobile-quote-toolbar{display:none!important}body.quote-print-mode #mobileQuoteContent{margin:0;max-width:none;padding:0;min-height:0}body.quote-print-mode{background:#fff!important}@page{size:A4;margin:12mm}#mobileQuoteContent th,#mobileQuoteContent .quote-header{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
 <script>
 
 /* Customer-facing PDF quotation: do not expose accounting/cost/profit fields. */
@@ -573,9 +595,22 @@ rows();rCmp();rPV();calc();
   <div class="totals"><div><span>Total quantity</span><span>${fmt(totalQty)} MT</span></div><div><span>FOB product value</span><span>${e(cur)} ${fmt(productBase)}</span></div>${S.term==='FOB'?'':`<div><span>Delivery / price adjustment</span><span>${e(cur)} ${fmt(total-productBase)}</span></div>`}<div class="grand"><div class="grand-item"><span>${e(S.term)} PRICE / MT</span><span class="amount">${e(cur)} ${fmt(total/totalQty)}</span></div><div class="grand-item"><span>TOTAL ${e(S.term)} (${e(cur)})</span><span class="amount">${fmt(total)}</span></div></div></div>
   ${details}<p class="foot">Prices are subject to the terms and validity stated above. Please confirm before placing an order.</p>
   <script>window.addEventListener('load',()=>{setTimeout(()=>window.print(),350)});<\/script></body></html>`;
-  const win=window.open('','_blank');if(!win){$('qtStatus').textContent='Allow pop-ups for this site, then try Export again.';return}
-  win.document.open();win.document.write(html);win.document.close();
+  // Render inside the existing app instead of opening a new tab/window.
+  const panel=$('mobileQuotePanel'), content=$('mobileQuoteContent');
+  const parsed=new DOMParser().parseFromString(html,'text/html');
+  const body=parsed.body;
+  body.querySelectorAll('script').forEach(el=>el.remove());
+  const h=body.querySelector('header');if(h)h.className='quote-header';
+  const meta=body.querySelector('.meta');if(meta)meta.className='quote-meta';
+  const totals=body.querySelector('.totals');if(totals)totals.className='quote-totals';
+  const grand=body.querySelector('.grand');if(grand)grand.className='quote-grand';
+  content.replaceChildren(...Array.from(body.childNodes).map(n=>document.importNode(n,true)));
+  panel.hidden=false;document.body.style.overflow='hidden';panel.scrollTop=0;
+  $('qtStatus').textContent='Quotation preview opened. Use Print / Save PDF or Back to calculator.';
  }
+ $('mobileQuoteBack').addEventListener('click',()=>{ $('mobileQuotePanel').hidden=true;document.body.style.overflow='';document.body.classList.remove('quote-print-mode'); });
+ $('mobileQuotePrint').addEventListener('click',()=>{document.body.classList.add('quote-print-mode');window.print();});
+ window.addEventListener('afterprint',()=>document.body.classList.remove('quote-print-mode'));
  $('exportQuotation').addEventListener('click',function(){
   const status=$('qtStatus');status.textContent='';
   const items=S.products.filter(p=>N(p.qty)>0&&N(p.price)>0);
@@ -606,7 +641,11 @@ rows();rCmp();rPV();calc();
   const output=$('out');
   const incomplete=output.querySelector('.chip.pv');
   if(incomplete&&!confirm('The quotation is marked provisional/incomplete. Export anyway?'))return;
-  if(!window.jspdf?.jsPDF || !window.jspdf.jsPDF.API?.autoTable){printQuotation(items,total,totalQty,productBase,cur);status.textContent='Print dialog opened. Choose Save as PDF to export (no PDF library needed).';return}
+  const mobileDevice=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.matchMedia('(max-width: 760px)').matches;
+  if(mobileDevice || !window.jspdf?.jsPDF || !window.jspdf.jsPDF.API?.autoTable){
+   printQuotation(items,total,totalQty,productBase,cur);
+   return;
+  }
   const doc=new window.jspdf.jsPDF({unit:'mm',format:'a4'});
   const W=210,margin=17,right=193;
   const navy=[20,48,90],muted=[90,103,120];
@@ -653,5 +692,6 @@ rows();rCmp();rPV();calc();
 })();
 
 </script>
+
 </body>
 </html>

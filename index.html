@@ -150,7 +150,7 @@ header .row{align-items:center}
 <label>Volume (CBM)<input type="number" min="0" data-p="ship.cbm"></label>
 <label>Gross weight (MT)<input type="number" min="0" data-p="ship.gw"></label>
 <label>Payload limit (MT)<input type="number" min="0" data-p="ship.pay"></label>
-<label>Quote currency<input data-p="ship.cur" maxlength="3"></label>
+<label>Quote currency<select id="quoteCurrencySelect" aria-label="Quote currency"></select><input id="quoteCurrencyOther" maxlength="3" placeholder="Enter 3-letter code, e.g. AED" aria-label="Other quote currency" style="display:none;margin-top:5px;text-transform:uppercase"></label>
 <label>Freight valid until<input type="date" data-p="ship.valid"></label></div></section>
 
 <section><h2>Logistics charges</h2>
@@ -237,6 +237,18 @@ const f2=v=>v.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDig
 const opts=(a,v)=>a.map(x=>`<option${x==v?" selected":""}>${x}</option>`).join("");
 function getP(o,p){return p.split(".").reduce((a,k)=>a[k],o)}
 function setP(o,p,v){const k=p.split(".");const l=k.pop();k.reduce((a,x)=>a[x],o)[l]=v}
+const CURRENCY_CODES=["USD","EUR","GBP","VND","CNY","INR","JPY","KRW","SGD","THB","IDR","MYR","AED","SAR","AUD","CAD","CHF"];
+const currencyKnown=v=>CURRENCY_CODES.includes(String(v||"").toUpperCase());
+const currencyOptions=v=>CURRENCY_CODES.map(c=>`<option value="${c}"${c===String(v||"").toUpperCase()?" selected":""}>${c}</option>`).join("")+`<option value="OTHER"${!currencyKnown(v)?" selected":""}>Other / Khác...</option>`;
+function syncQuoteCurrency(){
+ const sel=document.getElementById("quoteCurrencySelect"),other=document.getElementById("quoteCurrencyOther");
+ if(!sel||!other)return;
+ sel.innerHTML=currencyOptions(S.ship.cur);
+ const custom=!currencyKnown(S.ship.cur);
+ other.style.display=custom?"block":"none";
+ other.value=custom?(S.ship.cur||""):"";
+}
+function normalizeCurrency(v){return String(v||"").trim().toUpperCase().replace(/[^A-Z]/g,"").slice(0,3)}
 function rows(){
  document.getElementById("pt").innerHTML=`<tr><th>Category</th><th>Grade</th><th>Description</th><th>Accounting Price/MT</th><th>FOB Price/MT</th><th>Qty (MT)</th><th>Cost/MT (advanced, opt.)</th><th class="r">Value</th><th></th></tr>`+
  S.products.map((p,i)=>`<tr><td><select data-a="products" data-i="${i}" data-f="cat">${opts(["White MB","Black MB","Color MB","Additive MB","Engineering Compound","Filler MB","Bio Filler","Bio Compound","Other"],p.cat)}</select></td>
@@ -249,14 +261,14 @@ function rows(){
  document.getElementById("lt").innerHTML=S.lines.length?`<tr><th>Charge</th><th>Stage</th><th>Amount</th><th>Cur.</th><th>Rate to quote cur.</th><th>Per</th><th>Seller pays?</th><th class="r">In quote cur.</th><th></th></tr>`+
  S.lines.map((l,i)=>`<tr><td><input data-a="lines" data-i="${i}" data-f="name" value="${esc(l.name)}"></td>
  <td><select data-a="lines" data-i="${i}" data-f="stage">${opts(["origin","freight","destination","import","other"],l.stage)}</select></td>
- <td><input type="number" step="any" data-a="lines" data-i="${i}" data-f="amt" value="${l.amt}"></td><td><input data-a="lines" data-i="${i}" data-f="cur" value="${esc(l.cur)}" style="min-width:55px"></td>
+ <td><input type="number" step="any" data-a="lines" data-i="${i}" data-f="amt" value="${l.amt}"></td><td><select data-charge-currency="${i}" aria-label="Charge currency">${currencyOptions(l.cur)}</select><input data-charge-currency-other="${i}" maxlength="3" placeholder="e.g. AED" aria-label="Other charge currency" value="${currencyKnown(l.cur)?"":esc(l.cur||"")}" style="${currencyKnown(l.cur)?"display:none;":""}margin-top:4px;min-width:65px;text-transform:uppercase"></td>
  <td><input type="number" step="any" min="0" data-a="lines" data-i="${i}" data-f="rate" value="${l.rate}"></td>
  <td><select data-a="lines" data-i="${i}" data-f="unit">${opts(["shipment","container","MT","kg","CBM"],l.unit)}</select></td>
  <td><select data-a="lines" data-i="${i}" data-f="mode">${["auto","incl","excl"].map(m=>`<option value="${m}"${m==l.mode?" selected":""}>${{auto:"Auto",incl:"Yes, include",excl:"No, exclude"}[m]}</option>`).join("")}</select></td>
  <td class="r" id="lv${i}"></td><td><button data-dell="${i}">✕</button></td></tr>`).join(""):`<tr><td style="color:var(--mu)">No charges yet. Add the freight and local charges you have quotes for.</td></tr>`;
  document.getElementById("bs").innerHTML=Object.keys(T).map(k=>`<option${k==S.base?" selected":""}>${k}</option>`).join("");
  document.getElementById("tg").innerHTML=Object.keys(T).map(k=>`<option${k==S.term?" selected":""}>${k}</option>`).join("");
- document.querySelectorAll("[data-p]").forEach(e=>{if(e.id!="bs"&&e.id!="tg")e.value=getP(S,e.dataset.p)});
+ document.querySelectorAll("[data-p]").forEach(e=>{if(e.id!="bs"&&e.id!="tg")e.value=getP(S,e.dataset.p)});syncQuoteCurrency();
 }
 const INTERNAL_RATES={CHINA:{Filler:3,Color:3,White:3,Compound:3,Additive:3,Black:6,Other:6},INDIA:{Filler:3,Color:3,White:3,Compound:3,Additive:3,Black:6,Other:6},OTHER:{Filler:5,Color:6,White:3,Compound:5,Additive:8,Black:8,Other:8}};
 function profitGroup(cat){if(cat==="White MB")return "White";if(cat==="Black MB")return "Black";if(cat==="Color MB")return "Color";if(cat==="Additive MB")return "Additive";if(cat==="Engineering Compound"||cat==="Bio Compound")return "Compound";if(cat==="Filler MB"||cat==="Bio Filler")return "Filler";return "Other";}
@@ -363,10 +375,10 @@ function calc(){
  ${E.map(x=>`<div class="w e">${esc(x)}</div>`).join("")}${W.map(x=>`<div class="w">${esc(x)}</div>`).join("")}
  <div style="margin-top:10px;color:var(--mu)">${S.term} ${esc(S.ship.place||"")}, per ${S.unit||"MT"}</div>
  <div class="big">${cur} ${f2(tot/d)}</div>
- <div style="color:var(--mu)">Total quotation: ${cur} ${f2(tot)} · ${q?f2(per):"0.00"}/MT</div>
+ <div style="color:var(--mu)">Total ${S.term}: ${cur} ${f2(tot)} · ${cur} ${q?f2(per):"0.00"}/MT</div>
  <div class="row"><label>Show per<select data-u><option ${(S.unit||"MT")=="MT"?"selected":""}>MT</option><option ${S.unit=="kg"?"selected":""}>kg</option><option ${S.unit=="container"?"selected":""}>container</option><option ${S.unit=="shipment"?"selected":""}>shipment</option></select></label></div>
  <div class="bar">${pos.map((x,i)=>`<i title="${esc(x[0])}" style="width:${x[1]/pt*100}%;background:${colors[i%7]}"></i>`).join("")}</div>
- <table>${wf.map(x=>`<tr><td>${esc(x[0])}</td><td class="r">${f2(x[1])}</td></tr>`).join("")}<tr><th>Quotation total</th><th class="r" style="color:var(--tx)">${f2(tot)}</th></tr>${fobProfitBreakdown()}</table>
+ <table>${wf.map(x=>`<tr><td>${esc(x[0])}</td><td class="r">${f2(x[1])}</td></tr>`).join("")}<tr><th>Quotation total (${esc(S.term)})</th><th class="r" style="color:var(--tx)">${esc(cur)} ${f2(tot)}</th></tr>${fobProfitBreakdown()}</table>
  ${impHtml}<h2 style="margin-top:14px">By product</h2><div class="sc"><table><tr><th>Grade</th><th class="r">Shared costs</th><th class="r">Price/MT</th><th class="r">Total</th></tr>
  ${S.products.map((p,i)=>`<tr><td>${esc(p.grade||p.cat)}</td><td class="r">${f2(R[i].la)}</td><td class="r">${N(p.qty)?f2(Pq[i]/N(p.qty)):"–"}</td><td class="r">${f2(Pq[i])}</td></tr>`).join("")}</table></div>
  <h2 style="margin-top:14px">Advanced delivered-price profit (optional)</h2>
@@ -394,6 +406,29 @@ document.addEventListener("click",e=>{const t=e.target;
 let mem=[];function sk(){try{return JSON.parse(localStorage.getItem("eup_calcs")||"[]")}catch(e){return mem}}
 function st(k){mem=k;try{localStorage.setItem("eup_calcs",JSON.stringify(k))}catch(e){}}
 function sl(){const k=sk();document.getElementById("sl").innerHTML=k.length?`<table>${k.map((x,i)=>`<tr><td>${esc(x.name)}</td><td>${esc(x.status)}</td><td>${x.date}</td><td style="text-align:right"><button data-ld="${i}">Load</button> <button data-dl="${i}">Delete</button></td></tr>`).join("")}</table>`:`<span style="color:var(--mu)">Nothing saved yet.</span>`}
+document.getElementById("quoteCurrencySelect").addEventListener("change",e=>{
+ if(e.target.value==="OTHER"){
+  document.getElementById("quoteCurrencyOther").style.display="block";
+  document.getElementById("quoteCurrencyOther").value=currencyKnown(S.ship.cur)?"":S.ship.cur;
+  document.getElementById("quoteCurrencyOther").focus();
+ }else{S.ship.cur=e.target.value;document.getElementById("quoteCurrencyOther").style.display="none";calc();if(typeof invalidateQuotationPreview==="function")invalidateQuotationPreview()}
+});
+document.getElementById("quoteCurrencyOther").addEventListener("input",e=>{
+ e.target.value=normalizeCurrency(e.target.value);if(e.target.value.length===3){S.ship.cur=e.target.value;calc();if(typeof invalidateQuotationPreview==="function")invalidateQuotationPreview()}
+});
+document.addEventListener("change",e=>{
+ const t=e.target;
+ if(t.dataset.chargeCurrency!==undefined){
+  const i=Number(t.dataset.chargeCurrency),other=document.querySelector(`[data-charge-currency-other="${i}"]`);
+  if(t.value==="OTHER"){other.style.display="block";other.focus()}else{S.lines[i].cur=t.value;other.style.display="none";calc()}
+ }
+});
+document.addEventListener("input",e=>{
+ const t=e.target;
+ if(t.dataset.chargeCurrencyOther!==undefined){
+  t.value=normalizeCurrency(t.value);if(t.value.length===3){S.lines[Number(t.dataset.chargeCurrencyOther)].cur=t.value;calc()}
+ }
+});
 document.getElementById("bs").onchange=e=>{S.base=e.target.value;calc()};document.getElementById("tg").onchange=e=>{S.term=e.target.value;calc();if(typeof invalidateQuotationPreview==="function")invalidateQuotationPreview()};
 /* ---- Freight quotations ---- */
 const Q=[];let PV=[];
@@ -605,7 +640,7 @@ rows();rCmp();rPV();calc();
   <div class="meta"><div><small>Quotation no.</small>${f('qtNo')||'-'}<small>Customer</small>${f('qtCustomer')||'-'}<small>Contact</small>${f('qtContact')||'-'}</div><div><small>Date</small>${f('qtDate')||'-'}<small>Valid until</small>${f('qtValid')||e(S.ship.valid)||'-'}<small>Currency</small>${e(cur)}</div></div>
   <h2>DELIVERY TERMS</h2><p>${e(S.term)} ${e(S.ship.place)} (Incoterms 2020)</p><p>Route: ${e(S.ship.pol)} → ${e(S.ship.pod)}</p>
   <table><thead><tr><th style="width:7%">No.</th><th style="width:19%">Grade</th><th>Description</th><th style="width:13%">Qty (MT)</th><th style="width:16%">FOB/MT (${e(cur)})</th><th style="width:17%">FOB total (${e(cur)})</th></tr></thead><tbody>${r}</tbody></table>
-  <div class="totals"><div><span>Total quantity</span><span>${fmt(totalQty)} MT</span></div><div><span>FOB product value</span><span>${e(cur)} ${fmt(productBase)}</span></div>${S.term==='FOB'?'':`<div><span>Delivery / price adjustment</span><span>${e(cur)} ${fmt(total-productBase)}</span></div>`}<div class="grand"><div class="grand-item"><span>${e(S.term)} PRICE / MT</span><span class="amount">${e(cur)} ${fmt(total/totalQty)}</span></div><div class="grand-item"><span>TOTAL ${e(S.term)} (${e(cur)})</span><span class="amount">${fmt(total)}</span></div></div></div>
+  <div class="totals"><div><span>Total quantity</span><span>${fmt(totalQty)} MT</span></div><div><span>FOB product value</span><span>${e(cur)} ${fmt(productBase)}</span></div>${S.term==='FOB'?'':`<div><span>Delivery / price adjustment</span><span>${e(cur)} ${fmt(total-productBase)}</span></div>`}<div class="grand"><div class="grand-item"><span>${e(S.term)} PRICE / MT</span><span class="amount">${e(cur)} ${fmt(total/totalQty)}</span></div><div class="grand-item"><span>TOTAL ${e(S.term)}</span><span class="amount">${e(cur)} ${fmt(total)}</span></div></div></div>
   ${details}<p class="foot">Prices are subject to the terms and validity stated above. Please confirm before placing an order.</p>
   </body></html>`;
   // Render inside the existing app instead of opening a new tab/window.
@@ -748,8 +783,8 @@ rows();rCmp();rPV();calc();
   // Two aligned rows: total first in large type; per-MT beneath at breakdown size.
   doc.setDrawColor(...navy);doc.line(110,y+1,right,y+1);y+=12;
   doc.setTextColor(...navy);doc.setFont('helvetica','bold');doc.setFontSize(11);
-  doc.text('TOTAL '+S.term+' ('+cur+')',112,y);
-  doc.setFontSize(17);doc.text(fmt(total),right,y,{align:'right'});
+  doc.text('TOTAL '+S.term,112,y);
+  doc.setFontSize(17);doc.text(cur+' '+fmt(total),right,y,{align:'right'});
   y+=10;doc.setFont('helvetica','normal');doc.setFontSize(9);
   doc.text(S.term+' PRICE / MT',112,y);
   doc.text(cur+' '+fmt(total/totalQty),right,y,{align:'right'});

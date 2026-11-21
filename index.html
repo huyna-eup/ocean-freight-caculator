@@ -550,7 +550,7 @@ rows();rCmp();rPV();calc();
 })();
 </script>
 <div id="mobileQuotePanel" role="dialog" aria-modal="true" aria-label="Quotation preview" hidden>
- <div class="mobile-quote-toolbar"><button type="button" id="mobileQuoteBack">← Back to calculator</button><span>Quotation preview</span><button type="button" id="mobileQuotePrint">Print / Save PDF</button><button type="button" id="mobileQuoteShare">↗ Share PDF</button></div><div id="mobileShareHint" style="padding:8px 12px;background:#fff;color:#14305a;font-size:12px" role="status">If Share is unavailable, use Print / Save PDF and the phone sharing menu.</div>
+ <div class="mobile-quote-toolbar"><button type="button" id="mobileQuoteBack">← Back to calculator</button><span>Quotation preview</span><button type="button" id="mobileQuotePrint">Print / Save PDF</button><button type="button" id="mobileQuoteShare">↗ Share PDF</button><a id="mobileQuoteDownload" download="Quotation.pdf" hidden style="background:#fff;color:#14305a;padding:10px;border-radius:6px;text-decoration:none;font-size:13px">↓ Save PDF</a></div><div id="mobileShareHint" style="padding:8px 12px;background:#fff;color:#14305a;font-size:12px" role="status">If Share is unavailable, use Print / Save PDF and the phone sharing menu.</div>
  <div id="mobileQuoteContent"></div>
 </div>
 <style>
@@ -575,6 +575,7 @@ rows();rCmp();rPV();calc();
 
 /* Customer-facing PDF quotation: do not expose accounting/cost/profit fields. */
 (function(){
+ let lastPdfUrl=null;
  const fields=['qtNo','qtDate','qtValid','qtCustomer','qtContact','qtPayment','qtLead','qtSeller','qtRemarks'];
  const $=id=>document.getElementById(id);
  const today=new Date();$('qtDate').value=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
@@ -606,6 +607,7 @@ rows();rCmp();rPV();calc();
   const grand=body.querySelector('.grand');if(grand)grand.className='quote-grand';
   content.replaceChildren(...Array.from(body.childNodes).map(n=>document.importNode(n,true)));
   panel.hidden=false;document.body.style.overflow='hidden';panel.scrollTop=0;
+  $('mobileQuoteDownload').hidden=!lastPdfUrl;
   $('qtStatus').textContent='Quotation preview opened. Use Print / Save PDF or Back to calculator.';
  }
  $('mobileQuoteBack').addEventListener('click',()=>{ $('mobileQuotePanel').hidden=true;document.body.style.overflow='';document.body.classList.remove('quote-print-mode'); });
@@ -634,7 +636,7 @@ rows();rCmp();rPV();calc();
    charges+=c2(N(l.amt)*mult*rate);
   });
   if(missing.length){status.textContent='Complete charge details before exporting: '+missing.join(', ');return}
-  if(tl>=2&&bl<2&&!S.lines.some(l=>l.stage==='freight'&&l.mode!=='excl'&&N(l.amt)>0)){
+  if(tl>=2&&bl<2&&!S.lines.some(l=>l.stage==='freight'&&l.mode!=='excl'&&N(l.amt)>0) && !shareMode){
    if(!confirm('No ocean/main freight is entered. Export a provisional quotation anyway?'))return;
   }
   // Use the structured calculator result instead of scraping the summary HTML.
@@ -643,7 +645,7 @@ rows();rCmp();rPV();calc();
   if(!Number.isFinite(total)||total<=0){status.textContent='Enter valid product prices and quantities before exporting.';return}
   const output=$('out');
   const incomplete=output.querySelector('.chip.pv');
-  if(incomplete&&!confirm('The quotation is marked provisional/incomplete. Export anyway?'))return;
+  if(incomplete&&!shareMode&&!confirm('The quotation is marked provisional/incomplete. Export anyway?'))return;
   const mobileDevice=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.matchMedia('(max-width: 760px)').matches;
   if(!shareMode && (mobileDevice || !window.jspdf?.jsPDF || !window.jspdf.jsPDF.API?.autoTable)){
    printQuotation(items,total,totalQty,productBase,cur);
@@ -699,19 +701,31 @@ rows();rCmp();rPV();calc();
    const filename=safe+'.pdf';
    try{
     const blob=doc.output('blob');
+    if(lastPdfUrl)URL.revokeObjectURL(lastPdfUrl);
+    lastPdfUrl=URL.createObjectURL(blob);
+    const download=$('mobileQuoteDownload');
+    download.href=lastPdfUrl;download.download=filename;download.hidden=false;
     const file=new File([blob],filename,{type:'application/pdf'});
-    if(navigator.share && (!navigator.canShare || navigator.canShare({files:[file]}))){
-     await navigator.share({files:[file],title:'Commercial Quotation '+safe});
-     status.textContent='PDF sent to the share menu.';
+    // Call share directly in the click handler's synchronous execution path.
+    // Never await a fetch, a timer, or a confirmation dialog before navigator.share.
+    if(typeof navigator.share==='function' && (typeof navigator.canShare!=='function'||navigator.canShare({files:[file]}))){
+     const sharing=navigator.share({files:[file],title:'Commercial Quotation '+safe});
+     status.textContent='Opening the iPhone share sheet…';
+     sharing.then(()=>{status.textContent='PDF sharing completed.';}).catch(err=>{
+      if(err?.name==='AbortError'){status.textContent='Sharing cancelled.';return}
+      printQuotation(items,total,totalQty,productBase,cur);
+      $('mobileShareHint').textContent='iOS blocked the share sheet ('+(err?.message||err?.name||'unknown error')+'). Tap Save PDF above, or Print / Save PDF.';
+      status.textContent='Share unavailable. Use Save PDF in the preview.';
+     });
     }else{
-     // Share Sheet is not available on this device: offer the actual PDF file.
      printQuotation(items,total,totalQty,productBase,cur);
-     status.textContent='This browser does not support sharing PDF files directly. Use Print / Save PDF from the quotation preview, then share via your phone.';
+     $('mobileShareHint').textContent='File sharing is not supported here. Tap Save PDF above to open or download the actual PDF.';
+     status.textContent='Use Save PDF in the quotation preview.';
     }
    }catch(err){
-    if(err?.name==='AbortError'){status.textContent='Sharing cancelled.';return}
     printQuotation(items,total,totalQty,productBase,cur);
-    status.textContent='PDF sharing was blocked: '+(err?.message||String(err))+'. Use Print / Save PDF in the preview.';
+    $('mobileShareHint').textContent='PDF generation failed: '+(err?.message||String(err))+'. Use Print / Save PDF.';
+    status.textContent='PDF generation failed; print preview is available.';
    }
    return;
   }

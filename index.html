@@ -8,6 +8,7 @@
 <link rel="apple-touch-icon" href="./favicon.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.4/jspdf.plugin.autotable.min.js"></script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -202,7 +203,7 @@ header .row{align-items:center}
 <label>Seller / exporter<input id="qtSeller" value="European Plastic Joint Stock Company"></label>
 </div>
 <label style="margin-top:9px">Remarks / conditions<input id="qtRemarks" placeholder="e.g. Subject to final confirmation and shipping space"></label>
-<div class="row"><button class="p" id="exportQuotation" type="button">Export quotation PDF</button><button id="shareQuotation" type="button">↗ Share PDF</button><span id="qtStatus" style="font-size:12px;color:var(--mu)" role="status"></span></div>
+<div class="row"><button class="p" id="exportQuotation" type="button">Export quotation PDF</button><button id="shareQuotation" type="button">🖼 Export as Image</button><span id="qtStatus" style="font-size:12px;color:var(--mu)" role="status"></span></div>
 </section>
 <section><h2>Saved calculations</h2>
 <div class="row"><label style="flex:1;min-width:160px">Name<input id="sn" placeholder="Customer / reference"></label>
@@ -550,11 +551,17 @@ rows();rCmp();rPV();calc();
 })();
 </script>
 <div id="mobileQuotePanel" role="dialog" aria-modal="true" aria-label="Quotation preview" hidden>
- <div class="mobile-quote-toolbar"><button type="button" id="mobileQuoteBack">← Back to calculator</button><span>Quotation preview</span><button type="button" id="mobileQuotePrint">Print / Save PDF</button><button type="button" id="mobileQuoteShare">↗ Share PDF</button><a id="mobileQuoteDownload" download="Quotation.pdf" hidden style="background:#fff;color:#14305a;padding:10px;border-radius:6px;text-decoration:none;font-size:13px">↓ Save PDF</a></div><div id="mobileShareHint" style="padding:8px 12px;background:#fff;color:#14305a;font-size:12px" role="status">If Share is unavailable, use Print / Save PDF and the phone sharing menu.</div>
+ <div class="mobile-quote-toolbar"><button type="button" id="mobileQuoteBack">← Back to calculator</button><span>Quotation preview</span><button type="button" id="mobileQuotePrint">Print / Save PDF</button><button type="button" id="mobileQuoteShare">🖼 View image</button><a id="mobileQuoteDownload" download="Quotation.pdf" hidden style="background:#fff;color:#14305a;padding:10px;border-radius:6px;text-decoration:none;font-size:13px">↓ Save PDF</a></div><div id="mobileShareHint" style="padding:8px 12px;background:#fff;color:#14305a;font-size:12px" role="status">If Share is unavailable, use Print / Save PDF and the phone sharing menu.</div>
+ <div id="mobileImageHint" hidden style="padding:12px;text-align:center;color:#14305a;font-weight:600;background:#fff7db">Nhấn giữ vào ảnh báo giá bên dưới → chọn Save to Photos / Lưu vào Ảnh. Nếu không có tùy chọn, hãy mở website bằng Safari.</div>
+ <img id="mobileQuoteImage" alt="Commercial quotation image - long press to save" hidden style="display:block;width:100%;max-width:850px;height:auto;margin:10px auto;background:white;-webkit-touch-callout:default;user-select:auto;-webkit-user-select:auto" />
  <div id="mobileQuoteContent"></div>
 </div>
 <style>
 #mobileQuotePanel[hidden]{display:none!important}
+#mobileQuoteImage[hidden],#mobileImageHint[hidden]{display:none!important}
+#mobileQuotePanel.image-mode #mobileQuoteContent{display:none!important}
+#mobileQuotePanel.image-mode #mobileQuoteImage{display:block!important}
+#mobileQuotePanel.image-mode #mobileImageHint{display:block!important}
 #mobileQuotePanel{position:fixed;inset:0;z-index:9999;background:#eef1f5;color:#17202e;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
 .mobile-quote-toolbar{position:sticky;top:0;z-index:3;display:flex;gap:8px;align-items:center;justify-content:space-between;padding:calc(10px + env(safe-area-inset-top,0px)) 10px 10px;background:#14305a;color:#fff;flex-wrap:wrap}
 .mobile-quote-toolbar button{background:#fff;color:#14305a;border:0;border-radius:6px;padding:10px;font-size:13px}
@@ -606,16 +613,55 @@ rows();rCmp();rPV();calc();
   const totals=body.querySelector('.totals');if(totals)totals.className='quote-totals';
   const grand=body.querySelector('.grand');if(grand)grand.className='quote-grand';
   content.replaceChildren(...Array.from(body.childNodes).map(n=>document.importNode(n,true)));
-  panel.hidden=false;document.body.style.overflow='hidden';panel.scrollTop=0;
+  panel.classList.remove('image-mode');panel.hidden=false;document.body.style.overflow='hidden';panel.scrollTop=0;
   $('mobileQuoteDownload').hidden=!lastPdfUrl;
   $('qtStatus').textContent='Quotation preview opened. Use Print / Save PDF or Back to calculator.';
  }
  $('mobileQuoteBack').addEventListener('click',()=>{ $('mobileQuotePanel').hidden=true;document.body.style.overflow='';document.body.classList.remove('quote-print-mode'); });
  $('mobileQuotePrint').addEventListener('click',()=>{document.body.classList.add('quote-print-mode');window.print();});
  window.addEventListener('afterprint',()=>document.body.classList.remove('quote-print-mode'));
- $('mobileQuoteShare').addEventListener('click',()=>startQuotationExport(true));
- $('shareQuotation').addEventListener('click',()=>startQuotationExport(true));
+ $('mobileQuoteShare').addEventListener('click',()=>startQuotationImage());
+ $('shareQuotation').addEventListener('click',()=>startQuotationImage());
  $('exportQuotation').addEventListener('click',()=>startQuotationExport(false));
+ async function startQuotationImage(){
+  const status=$('qtStatus');
+  const items=S.products.filter(p=>N(p.qty)>0&&N(p.price)>0);
+  if(!items.length){status.textContent='Enter a product with FOB price and quantity first.';return}
+  if(S.pm.mode!=='1'||S.base!=='FOB'){status.textContent='Set base Incoterm to FOB and Pricing Mode to 1 first.';return}
+  calc();
+  const total=window.eupQuotationResult?.total;
+  if(!Number.isFinite(total)||total<=0){status.textContent='Please calculate a valid quotation first.';return}
+  if(typeof window.html2canvas!=='function'){
+   status.textContent='Image library could not load. Check your internet connection and reload the app.';
+   return;
+  }
+  const totalQty=items.reduce((a,p)=>a+N(p.qty),0);
+  const productBase=items.reduce((a,p)=>a+N(p.price)*N(p.qty),0);
+  const cur=(S.ship.cur||'USD').toUpperCase();
+  printQuotation(items,total,totalQty,productBase,cur);
+  const panel=$('mobileQuotePanel'),content=$('mobileQuoteContent'),img=$('mobileQuoteImage');
+  $('mobileImageHint').textContent='Đang tạo ảnh báo giá…';
+  status.textContent='Generating quotation image…';
+  // Capture at A4-like width, regardless of the narrow iPhone screen.
+  const previous={width:content.style.width,maxWidth:content.style.maxWidth,margin:content.style.margin,padding:content.style.padding};
+  try{
+   content.style.width='794px';content.style.maxWidth='none';content.style.margin='0';content.style.padding='28px';
+   await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+   const canvas=await window.html2canvas(content,{backgroundColor:'#ffffff',scale:2,width:794,windowWidth:1100,scrollX:0,scrollY:0,useCORS:true,logging:false});
+   img.src=canvas.toDataURL('image/png');
+   img.hidden=false;
+   panel.classList.add('image-mode');
+   $('mobileImageHint').textContent='NHẤN GIỮ VÀO ẢNH BÊN DƯỚI → chọn Save to Photos / Lưu vào Ảnh. Bạn cũng có thể chụp màn hình nếu iOS không cho lưu ảnh.';
+   panel.scrollTop=0;
+   status.textContent='Quotation image is ready. Long-press the image to save it.';
+  }catch(err){
+   panel.classList.remove('image-mode');
+   $('mobileImageHint').textContent='Không tạo được ảnh: '+(err?.message||String(err));
+   status.textContent='Image generation failed: '+(err?.message||String(err));
+  }finally{
+   Object.assign(content.style,previous);
+  }
+ }
  async function startQuotationExport(shareMode){
   const status=$('qtStatus');status.textContent='';
   const items=S.products.filter(p=>N(p.qty)>0&&N(p.price)>0);

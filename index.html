@@ -202,7 +202,7 @@ header .row{align-items:center}
 <label>Seller / exporter<input id="qtSeller" value="European Plastic Joint Stock Company"></label>
 </div>
 <label style="margin-top:9px">Remarks / conditions<input id="qtRemarks" placeholder="e.g. Subject to final confirmation and shipping space"></label>
-<div class="row"><button class="p" id="exportQuotation" type="button">Export quotation PDF</button><span id="qtStatus" style="font-size:12px;color:var(--mu)" role="status"></span></div>
+<div class="row"><button class="p" id="exportQuotation" type="button">Export quotation PDF</button><button id="shareQuotation" type="button">↗ Share PDF</button><span id="qtStatus" style="font-size:12px;color:var(--mu)" role="status"></span></div>
 </section>
 <section><h2>Saved calculations</h2>
 <div class="row"><label style="flex:1;min-width:160px">Name<input id="sn" placeholder="Customer / reference"></label>
@@ -550,7 +550,7 @@ rows();rCmp();rPV();calc();
 })();
 </script>
 <div id="mobileQuotePanel" role="dialog" aria-modal="true" aria-label="Quotation preview" hidden>
- <div class="mobile-quote-toolbar"><button type="button" id="mobileQuoteBack">← Back to calculator</button><span>Quotation preview</span><button type="button" id="mobileQuotePrint">Print / Save PDF</button></div>
+ <div class="mobile-quote-toolbar"><button type="button" id="mobileQuoteBack">← Back to calculator</button><span>Quotation preview</span><button type="button" id="mobileQuotePrint">Print / Save PDF</button><button type="button" id="mobileQuoteShare">↗ Share PDF</button></div>
  <div id="mobileQuoteContent"></div>
 </div>
 <style>
@@ -611,7 +611,10 @@ rows();rCmp();rPV();calc();
  $('mobileQuoteBack').addEventListener('click',()=>{ $('mobileQuotePanel').hidden=true;document.body.style.overflow='';document.body.classList.remove('quote-print-mode'); });
  $('mobileQuotePrint').addEventListener('click',()=>{document.body.classList.add('quote-print-mode');window.print();});
  window.addEventListener('afterprint',()=>document.body.classList.remove('quote-print-mode'));
- $('exportQuotation').addEventListener('click',function(){
+ $('mobileQuoteShare').addEventListener('click',()=>startQuotationExport(true));
+ $('shareQuotation').addEventListener('click',()=>startQuotationExport(true));
+ $('exportQuotation').addEventListener('click',()=>startQuotationExport(false));
+ async function startQuotationExport(shareMode){
   const status=$('qtStatus');status.textContent='';
   const items=S.products.filter(p=>N(p.qty)>0&&N(p.price)>0);
   if(!items.length){status.textContent='Enter a product with FOB price and quantity first.';return}
@@ -642,8 +645,12 @@ rows();rCmp();rPV();calc();
   const incomplete=output.querySelector('.chip.pv');
   if(incomplete&&!confirm('The quotation is marked provisional/incomplete. Export anyway?'))return;
   const mobileDevice=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.matchMedia('(max-width: 760px)').matches;
-  if(mobileDevice || !window.jspdf?.jsPDF || !window.jspdf.jsPDF.API?.autoTable){
+  if(!shareMode && (mobileDevice || !window.jspdf?.jsPDF || !window.jspdf.jsPDF.API?.autoTable)){
    printQuotation(items,total,totalQty,productBase,cur);
+   return;
+  }
+  if(shareMode && (!window.jspdf?.jsPDF || !window.jspdf.jsPDF.API?.autoTable)){
+   status.textContent='PDF generator unavailable. Open the website with an internet connection and try Share PDF again.';
    return;
   }
   const doc=new window.jspdf.jsPDF({unit:'mm',format:'a4'});
@@ -687,8 +694,27 @@ rows();rCmp();rPV();calc();
   details.forEach(([label,value])=>{if(!value.trim())return;ensure(18);doc.setFont('helvetica','bold');doc.text(label+':',margin,y);doc.setFont('helvetica','normal');const lines=doc.splitTextToSize(pdfText(value),173);doc.text(lines,margin,y+5);y+=9+lines.length*4});
   ensure(18);doc.setFontSize(8);doc.setTextColor(...muted);doc.text('Prices are subject to the terms and validity stated above. Please confirm before placing an order.',margin,y+6,{maxWidth:175});
   const safe=($('qtNo').value||'Quotation').replace(/[^a-zA-Z0-9_-]+/g,'_').slice(0,60);
+  if(shareMode){
+   const filename=safe+'.pdf';
+   try{
+    const blob=doc.output('blob');
+    const file=new File([blob],filename,{type:'application/pdf'});
+    if(navigator.share && (!navigator.canShare || navigator.canShare({files:[file]}))){
+     await navigator.share({files:[file],title:'Commercial Quotation '+safe});
+     status.textContent='PDF sent to the share menu.';
+    }else{
+     // Share Sheet is not available on this device: offer the actual PDF file.
+     doc.save(filename);
+     status.textContent='This browser cannot share PDF files directly. Download attempted instead; try opening in Safari or Chrome.';
+    }
+   }catch(err){
+    if(err?.name==='AbortError'){status.textContent='Sharing cancelled.';return}
+    status.textContent='Could not share PDF: '+(err?.message||String(err));
+   }
+   return;
+  }
   doc.save(safe+'.pdf');status.textContent='Quotation PDF generated.';
- });
+ }
 })();
 
 </script>

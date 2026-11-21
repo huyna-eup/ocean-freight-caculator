@@ -550,7 +550,7 @@ rows();rCmp();rPV();calc();
 })();
 </script>
 <div id="mobileQuotePanel" role="dialog" aria-modal="true" aria-label="Quotation preview" hidden>
- <div class="mobile-quote-toolbar"><button type="button" id="mobileQuoteBack">← Back to calculator</button><span>Quotation preview</span><button type="button" id="mobileQuotePrint">Print / Save PDF</button><button type="button" id="mobileQuoteShare">↗ Share PDF</button></div>
+ <div class="mobile-quote-toolbar"><button type="button" id="mobileQuoteBack">← Back to calculator</button><span>Quotation preview</span><button type="button" id="mobileQuotePrint">Print / Save PDF</button><button type="button" id="mobileQuoteShare">↗ Share PDF</button></div><div id="mobileShareHint" style="padding:8px 12px;background:#fff;color:#14305a;font-size:12px" role="status">If Share is unavailable, use Print / Save PDF and the phone sharing menu.</div>
  <div id="mobileQuoteContent"></div>
 </div>
 <style>
@@ -594,7 +594,7 @@ rows();rCmp();rPV();calc();
   <table><thead><tr><th style="width:7%">No.</th><th style="width:19%">Grade</th><th>Description</th><th style="width:13%">Qty (MT)</th><th style="width:16%">FOB/MT (${e(cur)})</th><th style="width:17%">FOB total (${e(cur)})</th></tr></thead><tbody>${r}</tbody></table>
   <div class="totals"><div><span>Total quantity</span><span>${fmt(totalQty)} MT</span></div><div><span>FOB product value</span><span>${e(cur)} ${fmt(productBase)}</span></div>${S.term==='FOB'?'':`<div><span>Delivery / price adjustment</span><span>${e(cur)} ${fmt(total-productBase)}</span></div>`}<div class="grand"><div class="grand-item"><span>${e(S.term)} PRICE / MT</span><span class="amount">${e(cur)} ${fmt(total/totalQty)}</span></div><div class="grand-item"><span>TOTAL ${e(S.term)} (${e(cur)})</span><span class="amount">${fmt(total)}</span></div></div></div>
   ${details}<p class="foot">Prices are subject to the terms and validity stated above. Please confirm before placing an order.</p>
-  <script>window.addEventListener('load',()=>{setTimeout(()=>window.print(),350)});<\/script></body></html>`;
+  </body></html>`;
   // Render inside the existing app instead of opening a new tab/window.
   const panel=$('mobileQuotePanel'), content=$('mobileQuoteContent');
   const parsed=new DOMParser().parseFromString(html,'text/html');
@@ -650,7 +650,8 @@ rows();rCmp();rPV();calc();
    return;
   }
   if(shareMode && (!window.jspdf?.jsPDF || !window.jspdf.jsPDF.API?.autoTable)){
-   status.textContent='PDF generator unavailable. Open the website with an internet connection and try Share PDF again.';
+   printQuotation(items,total,totalQty,productBase,cur);
+   status.textContent='PDF sharing is unavailable because the PDF library did not load. Quotation preview is open; use Print / Save PDF to save or share it.';
    return;
   }
   const doc=new window.jspdf.jsPDF({unit:'mm',format:'a4'});
@@ -704,12 +705,13 @@ rows();rCmp();rPV();calc();
      status.textContent='PDF sent to the share menu.';
     }else{
      // Share Sheet is not available on this device: offer the actual PDF file.
-     doc.save(filename);
-     status.textContent='This browser cannot share PDF files directly. Download attempted instead; try opening in Safari or Chrome.';
+     printQuotation(items,total,totalQty,productBase,cur);
+     status.textContent='This browser does not support sharing PDF files directly. Use Print / Save PDF from the quotation preview, then share via your phone.';
     }
    }catch(err){
     if(err?.name==='AbortError'){status.textContent='Sharing cancelled.';return}
-    status.textContent='Could not share PDF: '+(err?.message||String(err));
+    printQuotation(items,total,totalQty,productBase,cur);
+    status.textContent='PDF sharing was blocked: '+(err?.message||String(err))+'. Use Print / Save PDF in the preview.';
    }
    return;
   }

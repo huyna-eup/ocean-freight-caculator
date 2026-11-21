@@ -8,6 +8,8 @@
 <link rel="apple-touch-icon" href="./favicon.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.4/jspdf.plugin.autotable.min.js"></script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
 :root{--bg:#f4f6f9;--sf:#fff;--tx:#17202e;--mu:#5d6b80;--ln:#dbe1ea;--nv:#14305a;--nvt:#fff;--ok:#1b7a4b;--wn:#a15c00;--er:#b3261e;--wb:#fff4dc;--eb:#fde7e5;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -187,6 +189,21 @@ header .row{align-items:center}
 <div id="fqp"></div>
 <h2 style="margin-top:14px">Compare quotes</h2><div id="cmp"></div></section>
 
+<section id="quoteExport"><h2>Export commercial quotation (PDF)</h2>
+<p style="margin:0 0 9px;color:var(--mu);font-size:12px">Customer-facing quotation. Accounting price, internal cost and profit are never included in the PDF.</p>
+<div class="g">
+<label>Quotation no.<input id="qtNo" placeholder="e.g. EUP-Q-2026-001"></label>
+<label>Quotation date<input id="qtDate" type="date"></label>
+<label>Valid until<input id="qtValid" type="date"></label>
+<label>Customer / company<input id="qtCustomer" placeholder="Customer name"></label>
+<label>Contact person<input id="qtContact" placeholder="Optional"></label>
+<label>Payment terms<input id="qtPayment" placeholder="e.g. T/T 30% deposit, 70% before shipment"></label>
+<label>Delivery time<input id="qtLead" placeholder="e.g. 15–20 days after deposit"></label>
+<label>Seller / exporter<input id="qtSeller" value="European Plastic Joint Stock Company"></label>
+</div>
+<label style="margin-top:9px">Remarks / conditions<input id="qtRemarks" placeholder="e.g. Subject to final confirmation and shipping space"></label>
+<div class="row"><button class="p" id="exportQuotation" type="button">Export quotation PDF</button><span id="qtStatus" style="font-size:12px;color:var(--mu)" role="status"></span></div>
+</section>
 <section><h2>Saved calculations</h2>
 <div class="row"><label style="flex:1;min-width:160px">Name<input id="sn" placeholder="Customer / reference"></label>
 <label>Status<select id="ss"><option>Draft</option><option>Sent</option><option>Under Negotiation</option><option>Accepted</option><option>Expired</option><option>Cancelled</option></select></label><button class="p" id="sv">Save</button></div>
@@ -322,6 +339,7 @@ function calc(){
  if(insOn&&!fixed&&N(S.ins.min)>0&&a>0&&prem<N(S.ins.min)){a=0;fixed=N(S.ins.min);R=solve(0,fixed);W.push("Minimum premium applied.")}
  if(R.some(r=>r.miss)){W.push("Cost per MT is missing, so profit is unknown and the price is provisional.");incomplete=true}
  const disc=N(S.pm.disc)/100,Pq=R.map(r=>c2(r.P*(1-disc)));const tot=Pq.reduce((x,y)=>x+y,0);
+ window.eupQuotationResult={total:tot,productTotals:Pq.slice(),currency:cur,term:S.term};
  const insTot=fixed?fixed:c2(tot*a);
  const known=S.products.every(p=>p.cost!=="");let cost=null,profit=null;
  if(known&&q>0){cost=S.products.reduce((s,p)=>s+(N(p.cost)+N(S.pm.exp)+N(S.pm.cont))*N(p.qty),0)+L;profit=tot*(1-fp)-insTot-cost}
@@ -521,6 +539,7 @@ rows();rCmp();rPV();calc();
    document.getElementById('ss').selectedIndex=0;
    document.getElementById('fqf').value='';
    document.getElementById('fqp').innerHTML='';
+   if(window.resetQuotationFields)window.resetQuotationFields();
    const guide=document.getElementById('guide');
    // Do not reset theme, view preference, guide preference, or saved records.
    rows();
@@ -529,6 +548,110 @@ rows();rCmp();rPV();calc();
    calc();
  },true);
 })();
+</script>
+<script>
+
+/* Customer-facing PDF quotation: do not expose accounting/cost/profit fields. */
+(function(){
+ const fields=['qtNo','qtDate','qtValid','qtCustomer','qtContact','qtPayment','qtLead','qtSeller','qtRemarks'];
+ const $=id=>document.getElementById(id);
+ const today=new Date();$('qtDate').value=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+ window.resetQuotationFields=function(){fields.forEach(id=>$(id).value='');$('qtSeller').value='European Plastic Joint Stock Company';$('qtStatus').textContent=''};
+ const fmt=n=>Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+ const pdfText=v=>String(v??'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[\u0111]/g,'d').replace(/[\u0110]/g,'D').replace(/[^\x20-\x7e\n]/g,' ').replace(/\s+/g,' ').trim();
+ function printQuotation(items,total,totalQty,productBase,cur){
+  const e=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const f=id=>e($(id).value);
+  const r=items.map((p,i)=>`<tr><td>${i+1}</td><td>${e(p.grade||p.cat)}</td><td>${e(p.desc||p.cat)}</td><td class="num">${fmt(N(p.qty))}</td><td class="num">${fmt(N(p.price))}</td><td class="num">${fmt(N(p.qty)*N(p.price))}</td></tr>`).join('');
+  const details=[['Payment terms',f('qtPayment')],['Delivery time',f('qtLead')],['Remarks',f('qtRemarks')]].filter(x=>x[1]).map(x=>`<p><strong>${x[0]}:</strong> ${x[1]}</p>`).join('');
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>Commercial Quotation</title><style>
+  @page{size:A4;margin:17mm}*{box-sizing:border-box}body{font:12px Arial,sans-serif;color:#1b293a;margin:0}header{background:#14305a;color:white;padding:19px 18px;margin-bottom:22px}h1{font-size:22px;margin:0 0 8px}header p{margin:0}.meta{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}.meta div{line-height:1.65}small{display:block;color:#66768a;font-weight:bold;text-transform:uppercase}h2{font-size:12px;margin:16px 0 7px;color:#14305a}table{width:100%;border-collapse:collapse;margin:15px 0;table-layout:fixed}th,td{border:1px solid #d9e0e9;padding:8px 5px;overflow-wrap:anywhere}th{background:#14305a;color:white;text-align:left}tr{break-inside:avoid}.num{text-align:right}.totals{margin-left:auto;width:54%;line-height:2}.totals div{display:flex;justify-content:space-between;gap:10px}.grand{border-top:2px solid #14305a;font-size:13px;font-weight:bold;color:#14305a;display:grid!important;grid-template-columns:1fr 1fr;gap:12px!important;padding-top:7px}.grand .grand-item{display:flex;flex-direction:column;gap:1px;line-height:1.45}.grand .grand-item:last-child{text-align:right}.grand .grand-item .amount{font-size:15px}.foot{margin-top:25px;color:#66768a;font-size:10px}@media print{header,th{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
+  </style></head><body><header><h1>COMMERCIAL QUOTATION</h1><p>${f('qtSeller')||'European Plastic Joint Stock Company'}</p></header>
+  <div class="meta"><div><small>Quotation no.</small>${f('qtNo')||'-'}<small>Customer</small>${f('qtCustomer')||'-'}<small>Contact</small>${f('qtContact')||'-'}</div><div><small>Date</small>${f('qtDate')||'-'}<small>Valid until</small>${f('qtValid')||e(S.ship.valid)||'-'}<small>Currency</small>${e(cur)}</div></div>
+  <h2>DELIVERY TERMS</h2><p>${e(S.term)} ${e(S.ship.place)} (Incoterms 2020)</p><p>Route: ${e(S.ship.pol)} → ${e(S.ship.pod)}</p>
+  <table><thead><tr><th style="width:7%">No.</th><th style="width:19%">Grade</th><th>Description</th><th style="width:13%">Qty (MT)</th><th style="width:16%">FOB/MT (${e(cur)})</th><th style="width:17%">FOB total (${e(cur)})</th></tr></thead><tbody>${r}</tbody></table>
+  <div class="totals"><div><span>Total quantity</span><span>${fmt(totalQty)} MT</span></div><div><span>FOB product value</span><span>${e(cur)} ${fmt(productBase)}</span></div>${S.term==='FOB'?'':`<div><span>Delivery / price adjustment</span><span>${e(cur)} ${fmt(total-productBase)}</span></div>`}<div class="grand"><div class="grand-item"><span>${e(S.term)} PRICE / MT</span><span class="amount">${e(cur)} ${fmt(total/totalQty)}</span></div><div class="grand-item"><span>TOTAL ${e(S.term)} (${e(cur)})</span><span class="amount">${fmt(total)}</span></div></div></div>
+  ${details}<p class="foot">Prices are subject to the terms and validity stated above. Please confirm before placing an order.</p>
+  <script>window.addEventListener('load',()=>{setTimeout(()=>window.print(),350)});<\/script></body></html>`;
+  const win=window.open('','_blank');if(!win){$('qtStatus').textContent='Allow pop-ups for this site, then try Export again.';return}
+  win.document.open();win.document.write(html);win.document.close();
+ }
+ $('exportQuotation').addEventListener('click',function(){
+  const status=$('qtStatus');status.textContent='';
+  const items=S.products.filter(p=>N(p.qty)>0&&N(p.price)>0);
+  if(!items.length){status.textContent='Enter a product with FOB price and quantity first.';return}
+  if(S.pm.mode!=='1'){status.textContent='Use Pricing Mode 1 for a customer quotation based on the FOB prices entered.';return}
+  if(S.base!=='FOB'){status.textContent='Set the base Incoterm to FOB to export a quotation based on your entered FOB prices.';return}
+  const totalQty=items.reduce((a,p)=>a+N(p.qty),0);
+  const cur=(S.ship.cur||'USD').toUpperCase();
+  const productBase=items.reduce((a,p)=>a+N(p.price)*N(p.qty),0);
+  const tl=T[S.term][0],bl=T[S.base][0],n=N(S.ship.n);
+  let charges=0,missing=[];
+  S.lines.forEach((l,i)=>{
+   const sl=SL[l.stage],include=l.mode==='incl'||(l.mode==='auto'&&tl>=sl&&bl<sl);
+   if(!include||l.mode==='excl')return;
+   const mult={shipment:1,container:n,MT:totalQty,kg:totalQty*1000,CBM:N(S.ship.cbm)}[l.unit];
+   let rate=N(l.rate);if(String(l.cur||cur).toUpperCase()===cur&&!l.rate)rate=1;
+   if(!rate||!mult){missing.push(l.name||'Charge '+(i+1));return}
+   charges+=c2(N(l.amt)*mult*rate);
+  });
+  if(missing.length){status.textContent='Complete charge details before exporting: '+missing.join(', ');return}
+  if(tl>=2&&bl<2&&!S.lines.some(l=>l.stage==='freight'&&l.mode!=='excl'&&N(l.amt)>0)){
+   if(!confirm('No ocean/main freight is entered. Export a provisional quotation anyway?'))return;
+  }
+  // Use the structured calculator result instead of scraping the summary HTML.
+  calc();
+  const total=window.eupQuotationResult?.total;
+  if(!Number.isFinite(total)||total<=0){status.textContent='Enter valid product prices and quantities before exporting.';return}
+  const output=$('out');
+  const incomplete=output.querySelector('.chip.pv');
+  if(incomplete&&!confirm('The quotation is marked provisional/incomplete. Export anyway?'))return;
+  if(!window.jspdf?.jsPDF || !window.jspdf.jsPDF.API?.autoTable){printQuotation(items,total,totalQty,productBase,cur);status.textContent='Print dialog opened. Choose Save as PDF to export (no PDF library needed).';return}
+  const doc=new window.jspdf.jsPDF({unit:'mm',format:'a4'});
+  const W=210,margin=17,right=193;
+  const navy=[20,48,90],muted=[90,103,120];
+  doc.setFillColor(...navy);doc.rect(0,0,W,30,'F');doc.setFont('helvetica','bold');doc.setFontSize(18);doc.setTextColor(255,255,255);doc.text('COMMERCIAL QUOTATION',margin,18);
+  doc.setFontSize(9);doc.setFont('helvetica','normal');doc.text(pdfText($('qtSeller').value||'European Plastic Joint Stock Company'),right,25,{align:'right'});
+  doc.setTextColor(30,40,55);
+  let y=40;
+  function pair(label,value,x,yy){doc.setFontSize(9);doc.setFont('helvetica','bold');doc.setTextColor(...muted);doc.text(label,x,yy);doc.setFont('helvetica','normal');doc.setTextColor(30,40,55);doc.text(pdfText(value||'-'),x,yy+5,{maxWidth:77})}
+  pair('QUOTATION NO.', $('qtNo').value,margin,y);pair('DATE',$('qtDate').value,111,y);y+=17;
+  pair('CUSTOMER',$('qtCustomer').value,margin,y);pair('VALID UNTIL',$('qtValid').value||S.ship.valid,111,y);y+=17;
+  pair('CONTACT',$('qtContact').value,margin,y);pair('CURRENCY',cur,111,y);y+=18;
+  doc.setDrawColor(220,226,234);doc.line(margin,y-5,right,y-5);
+  const route=[S.ship.pol,S.ship.pod].filter(Boolean).map(pdfText).join('  to  ');
+  const terms=`${S.term}${S.ship.place?' - '+S.ship.place:''} (Incoterms 2020)`;
+  doc.setFontSize(10);doc.setFont('helvetica','bold');doc.text('DELIVERY TERMS',margin,y);doc.setFont('helvetica','normal');doc.text(pdfText(terms),margin,y+6,{maxWidth:176});
+  y+=16;
+  if(route){doc.setFontSize(9);doc.setTextColor(...muted);doc.text('Route: '+route,margin,y,{maxWidth:176});y+=9}
+  const rows=items.map((p,i)=>[String(i+1),pdfText(p.grade||p.cat),pdfText(p.desc||p.cat),fmt(N(p.qty)),fmt(N(p.price)),fmt(N(p.qty)*N(p.price))]);
+  if(typeof doc.autoTable!=='function'){status.textContent='PDF table library could not load. Please check your internet connection.';return}
+  doc.autoTable({startY:y,head:[['No.','Grade','Description','Qty (MT)',`FOB / MT (${cur})`,`FOB total (${cur})`]],body:rows,theme:'grid',styles:{font:'helvetica',fontSize:8,cellPadding:2.8,textColor:[35,44,59],lineColor:[223,229,236],lineWidth:.15,overflow:'linebreak'},headStyles:{fillColor:navy,textColor:255,fontStyle:'bold'},columnStyles:{0:{cellWidth:10},1:{cellWidth:31},2:{cellWidth:54},3:{cellWidth:20,halign:'right'},4:{cellWidth:30,halign:'right'},5:{cellWidth:31,halign:'right'}},margin:{left:margin,right:margin},didDrawPage:function(){doc.setFontSize(8);doc.setTextColor(...muted);doc.text('European Plastic Joint Stock Company  |  Customer quotation',margin,286);doc.text('Page '+doc.internal.getNumberOfPages(),right,286,{align:'right'})}});
+  y=doc.lastAutoTable.finalY+11;
+  function ensure(h){if(y+h>270){doc.addPage();y=20}}
+  ensure(65);
+  doc.setFontSize(9);doc.setTextColor(...muted);doc.text('Total quantity',112,y);doc.setTextColor(30,40,55);doc.text(fmt(totalQty)+' MT',right,y,{align:'right'});y+=7;
+  doc.setTextColor(...muted);doc.text('FOB product value',112,y);doc.setTextColor(30,40,55);doc.text(cur+' '+fmt(productBase),right,y,{align:'right'});y+=7;
+  if(S.term!=='FOB'){
+   doc.setTextColor(...muted);doc.text('Delivery / other price adjustment',112,y);doc.setTextColor(30,40,55);doc.text(cur+' '+fmt(total-productBase),right,y,{align:'right'});y+=7;
+  }
+  // Unit price and total quotation share the same final summary row.
+  doc.setDrawColor(...navy);doc.line(110,y+1,right,y+1);y+=8;
+  doc.setFontSize(9);doc.setFont('helvetica','bold');doc.setTextColor(...navy);
+  doc.text(S.term+' PRICE / MT',112,y);
+  doc.text('TOTAL '+S.term+' ('+cur+')',right,y,{align:'right'});
+  y+=7;doc.setFontSize(11);
+  doc.text(cur+' '+fmt(total/totalQty),112,y);
+  doc.text(fmt(total),right,y,{align:'right'});y+=12;
+  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(30,40,55);
+  const details=[['Payment terms',$('qtPayment').value],['Delivery time',$('qtLead').value],['Remarks',$('qtRemarks').value]];
+  details.forEach(([label,value])=>{if(!value.trim())return;ensure(18);doc.setFont('helvetica','bold');doc.text(label+':',margin,y);doc.setFont('helvetica','normal');const lines=doc.splitTextToSize(pdfText(value),173);doc.text(lines,margin,y+5);y+=9+lines.length*4});
+  ensure(18);doc.setFontSize(8);doc.setTextColor(...muted);doc.text('Prices are subject to the terms and validity stated above. Please confirm before placing an order.',margin,y+6,{maxWidth:175});
+  const safe=($('qtNo').value||'Quotation').replace(/[^a-zA-Z0-9_-]+/g,'_').slice(0,60);
+  doc.save(safe+'.pdf');status.textContent='Quotation PDF generated.';
+ });
+})();
+
 </script>
 </body>
 </html>
